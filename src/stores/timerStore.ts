@@ -10,8 +10,8 @@ interface TimerStore {
   activity: ActivityType | null;
   sessionCount: number;
   currentSessionId: string | null;
-  // Track when the timer was last ticked so we can recover elapsed time
-  lastTickAt: number | null;
+  // Absolute timestamp (ms) when the timer should reach zero
+  endTime: number | null;
   // Pending break info (set when focus ends, consumed by TimerScreen to navigate)
   pendingBreak: {
     mode: 'short_break' | 'long_break';
@@ -34,7 +34,8 @@ let tickInterval: number | null = null;
 
 function startTicking(tick: () => void) {
   stopTicking();
-  tickInterval = window.setInterval(tick, 1000);
+  // Tick every 250ms for smooth countdown (updates display ~4x/sec)
+  tickInterval = window.setInterval(tick, 250);
 }
 
 function stopTicking() {
@@ -52,7 +53,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   activity: null,
   sessionCount: 0,
   currentSessionId: null,
-  lastTickAt: null,
+  endTime: null,
   pendingBreak: null,
 
   start: (timeSeconds, activity, sessionId) => {
@@ -63,7 +64,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       isRunning: true,
       activity,
       currentSessionId: sessionId,
-      lastTickAt: Date.now(),
+      endTime: Date.now() + timeSeconds * 1000,
       pendingBreak: null,
     });
     startTicking(get().tick);
@@ -71,11 +72,20 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
 
   pause: () => {
     stopTicking();
-    set({ isRunning: false, lastTickAt: null });
+    // Freeze timeRemaining at current value
+    const state = get();
+    const remaining = state.endTime
+      ? Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000))
+      : state.timeRemaining;
+    set({ isRunning: false, endTime: null, timeRemaining: remaining });
   },
 
   resume: () => {
-    set({ isRunning: true, lastTickAt: Date.now() });
+    const state = get();
+    set({
+      isRunning: true,
+      endTime: Date.now() + state.timeRemaining * 1000,
+    });
     startTicking(get().tick);
   },
 
@@ -89,25 +99,25 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       activity: null,
       sessionCount: 0,
       currentSessionId: null,
-      lastTickAt: null,
+      endTime: null,
       pendingBreak: null,
     });
   },
 
   tick: () => {
     const state = get();
-    if (!state.isRunning || state.timeRemaining <= 0) return;
+    if (!state.isRunning || !state.endTime) return;
 
-    // Calculate actual elapsed time to handle background/tab switches
-    const now = Date.now();
-    const elapsed = state.lastTickAt ? Math.floor((now - state.lastTickAt) / 1000) : 1;
-    const newTime = Math.max(0, state.timeRemaining - elapsed);
+    const remaining = Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000));
 
-    set({ timeRemaining: newTime, lastTickAt: now });
+    // Only update state if the displayed second has changed
+    if (remaining !== state.timeRemaining) {
+      set({ timeRemaining: remaining });
 
-    if (newTime <= 0) {
-      stopTicking();
-      set({ isRunning: false, lastTickAt: null });
+      if (remaining <= 0) {
+        stopTicking();
+        set({ isRunning: false, endTime: null });
+      }
     }
   },
 
@@ -133,7 +143,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       totalDuration: focusDurationSeconds,
       mode: 'focus',
       isRunning: true,
-      lastTickAt: Date.now(),
+      endTime: Date.now() + focusDurationSeconds * 1000,
       pendingBreak: null,
     });
     startTicking(get().tick);
