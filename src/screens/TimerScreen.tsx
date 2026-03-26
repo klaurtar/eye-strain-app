@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { formatTime } from '../utils/helpers';
 import type { ActivityType } from '../types';
 import { ActivitySelector } from '../components/ActivitySelector';
@@ -9,7 +9,6 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useTimerStore } from '../stores/timerStore';
 
 export function TimerScreen() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettingsStore();
   const { startSession, endSession } = useSessionStore();
@@ -25,31 +24,11 @@ export function TimerScreen() {
     }
   }, [location.state, settings.focusDurationMinutes, timer]);
 
-  // Handle focus timer completion — navigate to break
-  useEffect(() => {
-    if (timer.timeRemaining === 0 && !timer.isRunning && timer.mode === 'focus') {
-      timer.onFocusEnd(settings);
-    }
-  }, [timer.timeRemaining, timer.isRunning, timer.mode, settings, timer]);
-
-  // Handle pending break — navigate
-  useEffect(() => {
-    if (timer.pendingBreak) {
-      const breakInfo = timer.pendingBreak;
-      timer.clearPendingBreak();
-      navigate('/break', { state: breakInfo });
-    }
-  }, [timer.pendingBreak, timer, navigate]);
-
   const handleStart = (act: ActivityType) => {
     setShowActivityPicker(false);
     const session = startSession(act);
-    timer.start(settings.focusDurationMinutes * 60, act, session.id);
+    timer.start(settings.focusDurationMinutes * 60, act, session.id, settings);
   };
-
-  const handlePause = () => timer.pause();
-
-  const handleResume = () => timer.resume();
 
   const handleReset = () => {
     if (timer.currentSessionId) {
@@ -105,14 +84,14 @@ export function TimerScreen() {
         )}
 
         {timer.mode === 'focus' && timer.isRunning && (
-          <button className="btn btn-secondary" onClick={handlePause}>
+          <button className="btn btn-secondary" onClick={() => timer.pause()}>
             Pause
           </button>
         )}
 
         {timer.mode === 'focus' && !timer.isRunning && timer.timeRemaining > 0 && (
           <div className="btn-row">
-            <button className="btn btn-primary" onClick={handleResume}>
+            <button className="btn btn-primary" onClick={() => timer.resume()}>
               Resume
             </button>
             <button className="btn btn-ghost" onClick={handleReset}>

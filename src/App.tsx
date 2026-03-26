@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { NavBar } from './components/NavBar';
+import { TimerNavigator } from './components/TimerNavigator';
 import { TimerScreen } from './screens/TimerScreen';
 import { BreakScreen } from './screens/BreakScreen';
 import { SymptomCheckinScreen } from './screens/SymptomCheckinScreen';
@@ -41,6 +42,7 @@ function App() {
           </Routes>
         </main>
         <NavBar />
+        <TimerNavigator />
       </div>
     </BrowserRouter>
   );

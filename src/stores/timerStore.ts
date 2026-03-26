@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { ActivityType, TimerMode } from '../types';
 import { notifyFocusEnd } from '../utils/notifications';
 
+interface TimerSettings {
+  sessionsBeforeLongBreak: number;
+  longBreakMinutes: number;
+  shortBreakSeconds: number;
+  focusDurationMinutes: number;
+}
+
 interface TimerStore {
   timeRemaining: number;
   totalDuration: number;
@@ -10,31 +17,28 @@ interface TimerStore {
   activity: ActivityType | null;
   sessionCount: number;
   currentSessionId: string | null;
-  // Absolute timestamp (ms) when the timer should reach zero
   endTime: number | null;
-  // Pending break info (set when focus ends, consumed by TimerScreen to navigate)
   pendingBreak: {
     mode: 'short_break' | 'long_break';
     duration: number;
     sessionId: string | null;
   } | null;
+  // Store settings so tick() can handle completion autonomously
+  _settings: TimerSettings | null;
 
-  start: (timeSeconds: number, activity: ActivityType, sessionId: string) => void;
+  start: (timeSeconds: number, activity: ActivityType, sessionId: string, settings: TimerSettings) => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
   tick: () => void;
-  onFocusEnd: (settings: { sessionsBeforeLongBreak: number; longBreakMinutes: number; shortBreakSeconds: number; focusDurationMinutes: number }) => void;
+  consumePendingBreak: () => TimerStore['pendingBreak'];
   onBreakReturn: (focusDurationSeconds: number) => void;
-  clearPendingBreak: () => void;
-  setSessionId: (id: string) => void;
 }
 
 let tickInterval: number | null = null;
 
 function startTicking(tick: () => void) {
   stopTicking();
-  // Tick every 250ms for smooth countdown (updates display ~4x/sec)
   tickInterval = window.setInterval(tick, 250);
 }
 
@@ -55,8 +59,9 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   currentSessionId: null,
   endTime: null,
   pendingBreak: null,
+  _settings: null,
 
-  start: (timeSeconds, activity, sessionId) => {
+  start: (timeSeconds, activity, sessionId, settings) => {
     set({
       timeRemaining: timeSeconds,
       totalDuration: timeSeconds,
@@ -66,13 +71,13 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       currentSessionId: sessionId,
       endTime: Date.now() + timeSeconds * 1000,
       pendingBreak: null,
+      _settings: settings,
     });
     startTicking(get().tick);
   },
 
   pause: () => {
     stopTicking();
-    // Freeze timeRemaining at current value
     const state = get();
     const remaining = state.endTime
       ? Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000))
@@ -101,6 +106,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       currentSessionId: null,
       endTime: null,
       pendingBreak: null,
+      _settings: null,
     });
   },
 
@@ -110,34 +116,48 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
 
     const remaining = Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000));
 
-    // Only update state if the displayed second has changed
     if (remaining !== state.timeRemaining) {
       set({ timeRemaining: remaining });
+    }
 
-      if (remaining <= 0) {
-        stopTicking();
+    // Handle focus completion inside tick — works even if TimerScreen is unmounted
+    if (remaining <= 0) {
+      stopTicking();
+
+      const settings = state._settings;
+      if (state.mode === 'focus' && settings) {
+        const newCount = state.sessionCount + 1;
+        const isLongBreak = newCount % settings.sessionsBeforeLongBreak === 0;
+
+        notifyFocusEnd();
+
+        set({
+          isRunning: false,
+          endTime: null,
+          mode: 'idle',
+          sessionCount: newCount,
+          pendingBreak: {
+            mode: isLongBreak ? 'long_break' : 'short_break',
+            duration: isLongBreak ? settings.longBreakMinutes * 60 : settings.shortBreakSeconds,
+            sessionId: state.currentSessionId,
+          },
+        });
+      } else {
         set({ isRunning: false, endTime: null });
       }
     }
   },
 
-  onFocusEnd: (settings) => {
-    const newCount = get().sessionCount + 1;
-    const isLongBreak = newCount % settings.sessionsBeforeLongBreak === 0;
-
-    notifyFocusEnd();
-
-    set({
-      sessionCount: newCount,
-      pendingBreak: {
-        mode: isLongBreak ? 'long_break' : 'short_break',
-        duration: isLongBreak ? settings.longBreakMinutes * 60 : settings.shortBreakSeconds,
-        sessionId: get().currentSessionId,
-      },
-    });
+  consumePendingBreak: () => {
+    const breakInfo = get().pendingBreak;
+    if (breakInfo) {
+      set({ pendingBreak: null });
+    }
+    return breakInfo;
   },
 
   onBreakReturn: (focusDurationSeconds) => {
+    const state = get();
     set({
       timeRemaining: focusDurationSeconds,
       totalDuration: focusDurationSeconds,
@@ -146,10 +166,6 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       endTime: Date.now() + focusDurationSeconds * 1000,
       pendingBreak: null,
     });
-    startTicking(get().tick);
+    startTicking(state.tick);
   },
-
-  clearPendingBreak: () => set({ pendingBreak: null }),
-
-  setSessionId: (id) => set({ currentSessionId: id }),
 }));

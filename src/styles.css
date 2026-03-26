@@ -121,12 +121,13 @@ body {
 }
 
 .nav-icon {
-  font-size: 1rem;
+  font-size: 1.3rem;
   line-height: 1;
 }
 
 .nav-label {
   font-weight: 500;
+  font-size: 0.65rem;
 }
 
 /* ===== Screens ===== */
