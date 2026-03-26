@@ -8,13 +8,13 @@ interface ProgressRingProps {
 
 export function ProgressRing({
   progress,
-  size = 280,
-  strokeWidth = 6,
+  size = 260,
+  strokeWidth = 8,
   children,
 }: ProgressRingProps) {
-  const radius = (size - strokeWidth) / 2;
+  const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - progress);
+  const offset = circumference * (1 - Math.max(0, Math.min(1, progress)));
 
   return (
     <div className="progress-ring-container" style={{ width: size, height: size }}>
@@ -30,8 +30,9 @@ export function ProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--bg-elevated)"
+          stroke="var(--border)"
           strokeWidth={strokeWidth}
+          opacity={0.5}
         />
         {/* Progress arc */}
         <circle
