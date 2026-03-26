@@ -5,6 +5,7 @@ import type { ActivityType, TimerMode } from '../types';
 import { ActivitySelector } from '../components/ActivitySelector';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { notifyFocusEnd } from '../utils/notifications';
 
 export function TimerScreen() {
   const navigate = useNavigate();
@@ -53,6 +54,7 @@ export function TimerScreen() {
     if (timeRemaining === 0 && isRunning && mode === 'focus') {
       setIsRunning(false);
       if (intervalRef.current) clearInterval(intervalRef.current);
+      notifyFocusEnd();
       const newCount = sessionCount + 1;
       setSessionCount(newCount);
 

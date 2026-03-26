@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { formatTime } from '../utils/helpers';
 import { BREAK_PROMPTS } from '../types';
 import { useSessionStore } from '../stores/sessionStore';
+import { notifyBreakEnd } from '../utils/notifications';
 
 export function BreakScreen() {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ export function BreakScreen() {
 
   useEffect(() => {
     if (timeRemaining === 0) {
+      notifyBreakEnd();
       // Auto-complete after countdown finishes
       const timeout = setTimeout(handleComplete, 2000);
       return () => clearTimeout(timeout);
